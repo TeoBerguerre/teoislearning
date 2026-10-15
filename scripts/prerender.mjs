@@ -9,7 +9,6 @@ import { readdirSync, writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium } from "playwright";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const distDir = path.join(root, "dist");
@@ -49,8 +48,18 @@ const server = await serveDist(port);
 // isn't installed on this machine (`npx playwright install chromium`),
 // skip it rather than fail the whole build. The site still works fine as a
 // plain client-rendered SPA without it.
+// Playwright refuses to load on Node < 20 (it calls process.exit(1) on
+// import), so check first and skip instead of failing the build.
+const nodeMajor = Number(process.versions.node.split(".")[0]);
+if (nodeMajor < 20) {
+  console.warn(`[prerender] skipped — Node ${process.versions.node} is too old for Playwright (needs 20+).`);
+  server.close();
+  process.exit(0);
+}
+
 let browser;
 try {
+  const { chromium } = await import("playwright");
   browser = await chromium.launch();
 } catch (err) {
   console.warn(`[prerender] skipped — Chromium unavailable (${err.message.split("\n")[0]}).`);
